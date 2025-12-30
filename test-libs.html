@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>库加载测试</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #0f0;
+        }
+        .test {
+            margin: 10px 0;
+            padding: 10px;
+            background: #2a2a2a;
+            border-left: 3px solid #0f0;
+        }
+        .test.fail {
+            border-left-color: #f00;
+            color: #f00;
+        }
+        .test.pass {
+            border-left-color: #0f0;
+            color: #0f0;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/upng-js@2.1.0/UPNG.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js"></script>
+</head>
+<body>
+    <h1>📦 库加载测试</h1>
+    <div id="results"></div>
+
+    <script>
+        const tests = [
+            { name: 'JSZip', check: () => typeof JSZip !== 'undefined' },
+            { name: 'Three.js', check: () => typeof THREE !== 'undefined' },
+            { name: 'OrbitControls', check: () => typeof THREE.OrbitControls !== 'undefined' },
+            { name: 'pako', check: () => typeof pako !== 'undefined' },
+            { name: 'UPNG', check: () => typeof UPNG !== 'undefined' },
+            { name: 'omggif', check: () => typeof GifReader !== 'undefined' }
+        ];
+
+        const resultsDiv = document.getElementById('results');
+
+        tests.forEach(test => {
+            const div = document.createElement('div');
+            div.className = 'test';
+            
+            try {
+                const passed = test.check();
+                div.className += passed ? ' pass' : ' fail';
+                div.innerHTML = `${passed ? '✅' : '❌'} ${test.name}: ${passed ? 'OK' : 'FAILED'}`;
+                
+                if (passed && test.name === 'omggif') {
+                    div.innerHTML += `<br>   - GifReader: ${typeof GifReader === 'function' ? 'OK' : 'MISSING'}`;
+                    div.innerHTML += `<br>   - GifWriter: ${typeof GifWriter === 'function' ? 'OK' : 'MISSING'}`;
+                }
+            } catch (err) {
+                div.className += ' fail';
+                div.innerHTML = `❌ ${test.name}: ERROR - ${err.message}`;
+            }
+            
+            resultsDiv.appendChild(div);
+        });
+
+        // 全局检查
+        const allPassed = tests.every(test => {
+            try {
+                return test.check();
+            } catch {
+                return false;
+            }
+        });
+
+        const summary = document.createElement('div');
+        summary.className = 'test ' + (allPassed ? 'pass' : 'fail');
+        summary.innerHTML = `<br><strong>${allPassed ? '✅ 所有库加载成功！' : '❌ 部分库加载失败'}</strong>`;
+        resultsDiv.appendChild(summary);
+    </script>
+</body>
+</html>

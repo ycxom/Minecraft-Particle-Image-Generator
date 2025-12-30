@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft 3D 粒子工坊 (终极版)</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/upng-js@2.1.0/UPNG.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js"></script>
+</head>
+<body>
+
+<div class="main-layout">
+    <div class="sidebar">
+        <h1>✨ 3D 粒子工坊 <span style="font-size:0.6em;color:var(--accent)">PRO</span></h1>
+        
+        <div id="drop-zone">
+            <div style="font-size: 1.5rem;">🖼️ / 🎞️</div>
+            <div>点击上传<br><span style="font-size:0.8em;color:#888">支持 JPG, PNG, GIF, APNG</span></div>
+            <input type="file" id="file" accept="image/*" style="display:none">
+        </div>
+
+        <div class="control-group">
+            <label>生成版本</label>
+            <select id="version-select">
+                <option value="new">1.21+ / 1.20.5+ (推荐)</option>
+                <option value="old">1.13 - 1.20.4 (旧版)</option>
+                <option value="bedrock">基岩版 PE (方块模式)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label>图片宽度 (像素)</label>
+            <div class="input-row">
+                <input type="number" id="width-num" value="48" min="10" max="256">
+                <input type="range" id="width" min="10" max="256" value="48">
+            </div>
+        </div>
+        
+        <div id="anim-controls">
+            <h2 style="color:#22c55e; margin-top:0">🎞️ 动画设置</h2>
+            <div class="control-group">
+                <label>播放速度 (Tick间隔, 20tick=1秒)</label>
+                <input type="number" id="tick-delay" value="2" min="1" max="100">
+                <div style="font-size:0.75em; color:#888; margin-top:4px; text-align:center">越小越快。GIF建议设为 2 或 3</div>
+            </div>
+            <div class="control-group">
+                <label>每帧重复次数</label>
+                <input type="number" id="frame-repeat" value="1" min="1" max="10">
+                <div style="font-size:0.75em; color:#888; margin-top:4px; text-align:center">每帧重复播放的次数，增加可减慢动画速度</div>
+            </div>
+            <div class="control-group">
+                <label>动画播放模式</label>
+                <select id="anim-mode">
+                    <option value="datapack">数据包模式 (推荐)</option>
+                    <option value="commandblock">命令方块链模式</option>
+                </select>
+                <div style="font-size:0.75em; color:#888; margin-top:4px; text-align:center">命令方块链模式适合小型动画</div>
+            </div>
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="clear-particles" style="width:auto; margin-right:5px;">
+                    清除上一帧粒子 (基岩版方块模式)
+                </label>
+                <div style="font-size:0.75em; color:#888; margin-top:4px;">不勾选时粒子自然消散，形成过渡效果</div>
+            </div>
+        </div>
+
+        <h2>📍 相对位置 (Offset)</h2>
+        <div class="control-group">
+            <label style="color:#ff5555">~X (左右)</label>
+            <div class="input-row">
+                <input type="number" id="off-x-num" value="0" min="-100" max="100">
+                <input type="range" id="off-x" min="-100" max="100" value="0">
+            </div>
+        </div>
+        <div class="control-group">
+            <label style="color:#55ff55">~Y (高度)</label>
+            <div class="input-row">
+                <input type="number" id="off-y-num" value="2" min="-100" max="100">
+                <input type="range" id="off-y" min="-100" max="100" value="2">
+            </div>
+        </div>
+        <div class="control-group">
+            <label style="color:#5555ff">~Z (前后)</label>
+            <div class="input-row">
+                <input type="number" id="off-z-num" value="0" min="-100" max="100">
+                <input type="range" id="off-z" min="-100" max="100" value="0">
+            </div>
+        </div>
+
+        <h2>🔄 3D 旋转</h2>
+        <div class="preset-grid control-group">
+            <button class="btn-small" onclick="setAngle(0, 0, 0)">🏠 竖直</button>
+            <button class="btn-small" onclick="setAngle(-90, 0, 0)">___ 平铺</button>
+            <button class="btn-small" onclick="setAngle(90, 0, 0)">^^^ 天花</button>
+            <button class="btn-small" onclick="setAngle(-20, 45, 0)">📐 斜向</button>
+        </div>
+        
+        <div class="control-group">
+            <label>X轴 (俯仰 Pitch)</label>
+            <div class="input-row">
+                <input type="number" id="rot-x-num" value="0" min="-180" max="180">
+                <input type="range" id="rot-x" min="-180" max="180" value="0">
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Y轴 (偏航 Yaw)</label>
+            <div class="input-row">
+                <input type="number" id="rot-y-num" value="0" min="-180" max="180">
+                <input type="range" id="rot-y" min="-180" max="180" value="0">
+            </div>
+        </div>
+        <div class="control-group">
+            <label>Z轴 (翻滚 Roll)</label>
+            <div class="input-row">
+                <input type="number" id="rot-z-num" value="0" min="-180" max="180">
+                <input type="range" id="rot-z" min="-180" max="180" value="0">
+            </div>
+        </div>
+
+        <h2>⚙️ 其它</h2>
+        <div class="control-group">
+            <label>粒子间距</label>
+            <input type="number" id="spacing" value="0.15" step="0.05">
+        </div>
+        <div class="control-group">
+            <label>命名空间 (英文)</label>
+            <input type="text" id="namespace" value="art">
+        </div>
+
+        <div class="action-area">
+            <button class="btn-main" onclick="downloadPack()">📦 生成并下载数据包</button>
+            <div style="display:flex; gap:8px">
+                <button class="btn-secondary" id="btn-copy" onclick="copyRawCommands()" title="直接复制粒子指令">
+                    📋 复制内容
+                </button>
+                <button class="btn-secondary" id="btn-ooc" onclick="generateOneCommand()" title="生成单指令方块代码">
+                    🚂 单指令
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="display-area">
+        <div class="preview-container">
+            <div class="overlay-stats" id="stats">请上传图片 (支持 GIF/APNG)</div>
+            <div id="canvas-container"></div>
+        </div>
+
+        <div class="guide-panel">
+            <h2 style="position:sticky; top:0; background:var(--surface); padding-top:20px; margin-top:0; border-bottom:1px solid #444; z-index:2;">📖 详细使用说明</h2>
+            
+            <div id="guide-common">
+                <h3>🛠️ 基础步骤</h3>
+                <ol class="step-list">
+                    <li><b>上传素材：</b> 支持 PNG/JPG (静态) 和 GIF/APNG (动态)。</li>
+                    <li><b>调整参数：</b> 使用左侧面板调整大小、位置和旋转角度。</li>
+                    <li><b>位置技巧：</b> 建议将 <code>~Y (高度)</code> 设为 2~5，否则画面可能会卡在脚下的地面里。</li>
+                </ol>
+            </div>
+
+            <div id="guide-static">
+                <h3>🖼️ 静态图导出方式</h3>
+                <ul class="step-list">
+                    <li>
+                        <b>方法 A: 数据包 (推荐)</b><br>
+                        最稳定。点击下载后，放入 <code>.minecraft/saves/存档名/datapacks</code>，进游戏输入 <code>/reload</code>，然后输入 <code>/function 命名空间:draw</code>。
+                    </li>
+                    <li>
+                        <b>方法 B: 单指令 (One Command)</b><br>
+                        仅限小图 (宽度&lt;20)。生成后获得一条巨长的指令，去游戏里拿个命令方块 <code>/give @s command_block</code>，粘贴并激活即可。
+                    </li>
+                    <li>
+                        <b>方法 C: 复制内容</b><br>
+                        复制纯 <code>particle</code> 指令，方便粘贴到你自己写的 mcfunction 文件中。
+                    </li>
+                </ul>
+            </div>
+
+            <div id="guide-anim" style="display:none">
+                <h3 style="color:#22c55e">🎞️ 动画特别说明</h3>
+                <div class="tip">检测到 GIF/动画！已自动切换为动画模式。</div>
+                <ol class="step-list">
+                    <li><b>调整速度：</b> 左侧“动画设置”中的 Tick 间隔决定播放速度 (1秒=20Tick)。GIF通常建议设为 2 或 3。</li>
+                    <li><b>必须使用数据包：</b> 动画包含数千条指令，无法直接复制。请点击 <b>📦 生成并下载数据包</b>。</li>
+                    <li><b>工作原理：</b>
+                        <ul>
+                            <li>生成多个 <code>frame_X.mcfunction</code> 文件，每个文件显示一帧。</li>
+                            <li>使用 <code>loop.mcfunction</code> 作为主控制器，通过计分板追踪当前帧。</li>
+                            <li>每次调用 loop 时，显示当前帧并推进到下一帧，然后自动调度下一次执行。</li>
+                        </ul>
+                    </li>
+                    <li><b>安装与播放：</b>
+                        <ul>
+                            <li>安装数据包：下载后放入 <code>.minecraft/saves/存档名/datapacks</code>。</li>
+                            <li><b>进游戏：</b> 输入 <code>/reload</code> 重载数据包。</li>
+                            <li><b>播放动画：</b> 输入 <code>/function 命名空间:play</code> (例如 <code>/function art:play</code>)。</li>
+                            <li><b>停止动画：</b> 输入 <code>/function 命名空间:stop</code> (例如 <code>/function art:stop</code>)。</li>
+                            <li><b>重新播放：</b> 输入 <code>/function 命名空间:restart</code> 重新开始。</li>
+                            <li>💡 <b>自动循环：</b> 动画会自动循环播放，无需手动重启。</li>
+                        </ul>
+                    </li>
+                    <li><b>性能建议：</b>
+                        <ul>
+                            <li>如果帧数过多 (>100帧)，建议增大 Tick 间隔以减少卡顿。</li>
+                            <li>如果粒子数过多 (>10,000)，减小图片宽度或增大粒子间距。</li>
+                            <li>在低端设备上，建议同时运行的动画不超过 3 个。</li>
+                        </ul>
+                    </li>
+                </ol>
+            </div>
+            
+            <h3>❓ 常见问题</h3>
+            <ul class="step-list">
+                <li><b>看不见图像？</b> 检查 ~Y 高度是否被地板挡住。</li>
+                <li><b>基岩版全是方块？</b> 基岩版粒子接口限制，本工具使用 <code>setblock</code> 混凝土代替粒子。</li>
+                <li><b>游戏太卡？</b> 粒子数超过 10,000 会很卡。请减小“图片宽度”或增大“粒子间距”。</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<canvas id="helper-canvas" style="display:none"></canvas>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
