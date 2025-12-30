@@ -32,10 +32,22 @@ export class ImageParser {
             AppState.frames = frames;
             AppState.isAnim = frames.length > 1;
             
+            // 计算动画元数据
+            AppState.calculateAnimationMetadata();
+            
+            console.log('解析完成:', {
+                帧数: frames.length,
+                是否动画: AppState.isAnim,
+                总时长: `${AppState.totalDuration} ticks (${AppState.totalDuration * 50}ms)`,
+                平均延迟: `${AppState.avgDelayTicks.toFixed(1)} ticks`
+            });
+            
             return {
                 success: true,
                 frameCount: frames.length,
-                isAnimation: AppState.isAnim
+                isAnimation: AppState.isAnim,
+                totalDuration: AppState.totalDuration,
+                avgDelay: AppState.avgDelayTicks
             };
         } catch (err) {
             console.error('图片解析失败:', err);

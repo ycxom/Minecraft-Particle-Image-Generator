@@ -7,6 +7,39 @@ export class DatapackGenerator {
         this.particleGenerator = particleGenerator;
     }
 
+    /**
+     * 获取当前速度倍率设置
+     * @returns {number} 速度倍率 (0.25x - 4x)
+     */
+    getSpeedMultiplier() {
+        const speedSelect = document.getElementById('speed-multiplier');
+        if (speedSelect) {
+            return parseFloat(speedSelect.value) || 1.0;
+        }
+        
+        // 向后兼容：如果没有速度倍率控件，尝试从旧的 frame-repeat 控件计算
+        const frameRepeatEl = document.getElementById('frame-repeat');
+        if (frameRepeatEl) {
+            const frameRepeat = parseInt(frameRepeatEl.value) || 3;
+            // 将旧的重复次数转换为速度倍率（粗略估算）
+            // frameRepeat=1 -> 4x, frameRepeat=3 -> 1x, frameRepeat=6 -> 0.5x
+            return Math.max(0.25, Math.min(4.0, 3.0 / frameRepeat));
+        }
+        
+        return 1.0; // 默认原速
+    }
+
+    /**
+     * 计算有效帧延迟（应用速度倍率后）
+     * @param {number} originalTicks - 原始延迟（ticks）
+     * @param {number} speedMultiplier - 速度倍率
+     * @returns {number} 有效延迟（ticks，最小为1）
+     */
+    calculateEffectiveDelay(originalTicks, speedMultiplier) {
+        const adjusted = Math.round(originalTicks / speedMultiplier);
+        return Math.max(1, adjusted); // 最小 1 tick
+    }
+
     async generate() {
         if (!AppState.frames.length) {
             alert("请先上传图片！");
@@ -44,7 +77,8 @@ export class DatapackGenerator {
 
     generateStatic(funcFolder) {
         if (!AppState.currentFrameGen) this.particleGenerator.update();
-        const lines = this.commandGenerator.generate(AppState.currentFrameGen);
+        // 静态图片使用默认延迟
+        const lines = this.commandGenerator.generate(AppState.currentFrameGen, 2);
         funcFolder.file("draw.mcfunction", lines.join('\n'));
     }
 
@@ -64,13 +98,22 @@ export class DatapackGenerator {
     generateDatapackAnimation(funcFolder, ns) {
         const ver = document.getElementById('version-select').value;
         const clearParticles = document.getElementById('clear-particles')?.checked || false;
-        const frameRepeat = parseInt(document.getElementById('frame-repeat')?.value || 3);
+        const speedMultiplier = this.getSpeedMultiplier();
+        
+        console.log(`生成数据包动画，速度倍率: ${speedMultiplier}x`);
         
         // 生成每一帧
         for (let i = 0; i < AppState.frames.length; i++) {
             AppState.currentFrameIndex = i;
             this.particleGenerator.update();
-            const lines = this.commandGenerator.generate(AppState.currentFrameGen);
+            
+            // 获取当前帧的延迟信息
+            const frame = AppState.frames[i];
+            const originalDelay = frame.delayTicks || 2;
+            const effectiveDelay = this.calculateEffectiveDelay(originalDelay, speedMultiplier);
+            
+            // 传递延迟信息给命令生成器
+            const lines = this.commandGenerator.generate(AppState.currentFrameGen, effectiveDelay);
             
             // 如果是基岩版且需要清理，添加清理命令
             if (ver === 'bedrock' && clearParticles && i > 0) {
@@ -82,18 +125,38 @@ export class DatapackGenerator {
             }
             
             funcFolder.file(`frames/frame_${i}.mcfunction`, lines.join('\n'));
+            
+            // 生成粒子重复函数（用于延长显示时间）
+            const enhanceParticles = document.getElementById('enhance-particles')?.checked || false;
+            if (enhanceParticles && effectiveDelay > 2) {
+                this.generateParticleRefreshFunctions(funcFolder, ns, i, lines, effectiveDelay);
+            }
         }
         
-        // 生成帧处理函数（每帧一个独立的 handler）
+        // 生成帧处理函数（每帧使用独立的延迟）
         for (let i = 0; i < AppState.frames.length; i++) {
             const nextFrame = (i + 1) % AppState.frames.length;
+            const frame = AppState.frames[i];
+            const originalDelay = frame.delayTicks || 2;
+            const effectiveDelay = this.calculateEffectiveDelay(originalDelay, speedMultiplier);
+            
+            console.log(`帧 ${i}: 原始延迟 ${originalDelay} ticks -> 有效延迟 ${effectiveDelay} ticks`);
+            
             const handlerCmds = [
-                `function ${ns}:frames/frame_${i}`,
-                `scoreboard players add #repeat ${ns}_anim 1`,
-                `execute if score #repeat ${ns}_anim matches ${frameRepeat}.. run scoreboard players set #frame ${ns}_anim ${nextFrame}`,
-                `execute if score #repeat ${ns}_anim matches ${frameRepeat}.. run scoreboard players set #repeat ${ns}_anim 0`,
-                `schedule function ${ns}:loop 1t`
+                `function ${ns}:frames/frame_${i}`
             ];
+            
+            // 如果延迟较长且启用了粒子增强，启动粒子刷新
+            const enhanceParticles = document.getElementById('enhance-particles')?.checked || false;
+            if (enhanceParticles && effectiveDelay > 2) {
+                handlerCmds.push(`function ${ns}:refresh/start_refresh_${i}`);
+            }
+            
+            handlerCmds.push(
+                `scoreboard players set #frame ${ns}_anim ${nextFrame}`,
+                `schedule function ${ns}:loop ${effectiveDelay}t`
+            );
+            
             funcFolder.file(`handlers/handler_${i}.mcfunction`, handlerCmds.join('\n'));
         }
         
@@ -104,11 +167,10 @@ export class DatapackGenerator {
         }
         funcFolder.file("loop.mcfunction", loopCmds.join('\n'));
         
-        // 播放函数
+        // 播放函数（简化，不再需要 repeat 计数）
         const playCmds = [
             `scoreboard objectives add ${ns}_anim dummy`,
             `scoreboard players set #frame ${ns}_anim 0`,
-            `scoreboard players set #repeat ${ns}_anim 0`,
             `function ${ns}:loop`
         ];
         funcFolder.file("play.mcfunction", playCmds.join('\n'));
@@ -117,16 +179,50 @@ export class DatapackGenerator {
         const playCmdCmds = [
             `scoreboard objectives add ${ns}_anim dummy`,
             `scoreboard players set #frame ${ns}_anim 0`,
-            `scoreboard players set #repeat ${ns}_anim 0`,
             `scoreboard players set #playing ${ns}_anim 1`
         ];
         funcFolder.file("play_cmd.mcfunction", playCmdCmds.join('\n'));
         
-        // 停止函数
-        funcFolder.file("stop.mcfunction", `schedule clear ${ns}:loop\nscoreboard players set #playing ${ns}_anim 0`);
+        // 停止函数（清理所有 schedule）
+        const stopCmds = [
+            `schedule clear ${ns}:loop`,
+            `scoreboard players set #playing ${ns}_anim 0`
+        ];
+        
+        // 清理所有刷新函数
+        for (let i = 0; i < AppState.frames.length; i++) {
+            const frame = AppState.frames[i];
+            const originalDelay = frame.delayTicks || 2;
+            const effectiveDelay = this.calculateEffectiveDelay(originalDelay, speedMultiplier);
+            if (effectiveDelay > 2) {
+                stopCmds.push(`schedule clear ${ns}:refresh/refresh_${i}_1`);
+                stopCmds.push(`schedule clear ${ns}:refresh/refresh_${i}_2`);
+            }
+        }
+        
+        funcFolder.file("stop.mcfunction", stopCmds.join('\n'));
         
         // 重启函数
         funcFolder.file("restart.mcfunction", `function ${ns}:stop\nfunction ${ns}:play`);
+    }
+
+    /**
+     * 生成粒子刷新函数，用于延长粒子显示时间
+     */
+    generateParticleRefreshFunctions(funcFolder, ns, frameIndex, particleCommands, effectiveDelay) {
+        // 计算刷新间隔
+        const refreshInterval = Math.max(1, Math.floor(effectiveDelay / 3));
+        
+        // 生成启动刷新的函数
+        const startRefreshCmds = [
+            `schedule function ${ns}:refresh/refresh_${frameIndex}_1 ${refreshInterval}t`,
+            `schedule function ${ns}:refresh/refresh_${frameIndex}_2 ${refreshInterval * 2}t`
+        ];
+        funcFolder.file(`refresh/start_refresh_${frameIndex}.mcfunction`, startRefreshCmds.join('\n'));
+        
+        // 生成刷新函数（重复显示粒子）
+        funcFolder.file(`refresh/refresh_${frameIndex}_1.mcfunction`, particleCommands.join('\n'));
+        funcFolder.file(`refresh/refresh_${frameIndex}_2.mcfunction`, particleCommands.join('\n'));
     }
 
     generateClearCommands(data) {
@@ -146,14 +242,32 @@ export class DatapackGenerator {
     generateCommandBlockAnimation(funcFolder, ns) {
         const ver = document.getElementById('version-select').value;
         const clearParticles = document.getElementById('clear-particles')?.checked || false;
-        const frameRepeat = parseInt(document.getElementById('frame-repeat')?.value || 3);
+        const speedMultiplier = this.getSpeedMultiplier();
+        
+        console.log(`生成命令方块动画，速度倍率: ${speedMultiplier}x`);
+        
+        // 计算每帧的有效延迟
+        const frameDelays = [];
+        for (let i = 0; i < AppState.frames.length; i++) {
+            const frame = AppState.frames[i];
+            const originalDelay = frame.delayTicks || 2;
+            const effectiveDelay = this.calculateEffectiveDelay(originalDelay, speedMultiplier);
+            frameDelays.push(effectiveDelay);
+        }
         
         // 生成每一帧的粒子命令
         const allFrameCommands = [];
         for (let i = 0; i < AppState.frames.length; i++) {
             AppState.currentFrameIndex = i;
             this.particleGenerator.update();
-            const lines = this.commandGenerator.generate(AppState.currentFrameGen);
+            
+            // 获取当前帧的延迟信息
+            const frame = AppState.frames[i];
+            const originalDelay = frame.delayTicks || 2;
+            const effectiveDelay = this.calculateEffectiveDelay(originalDelay, speedMultiplier);
+            
+            // 传递延迟信息给命令生成器
+            const lines = this.commandGenerator.generate(AppState.currentFrameGen, effectiveDelay);
             
             // 如果是基岩版且需要清理，添加清理命令
             if (ver === 'bedrock' && clearParticles && i > 0) {
@@ -169,13 +283,13 @@ export class DatapackGenerator {
         
         // 生成命令方块链设置函数
         const setupCmds = [
-            `# 命令方块链动画设置`,
+            `# 命令方块链动画设置（每帧独立延迟）`,
             `scoreboard objectives add ${ns}_anim dummy "动画控制"`,
             `scoreboard players set #frame ${ns}_anim 0`,
             `scoreboard players set #playing ${ns}_anim 0`,
-            `scoreboard players set #repeat ${ns}_anim 0`,
+            `scoreboard players set #timer ${ns}_anim 0`,
             `tellraw @a {"text":"✅ 动画系统已初始化","color":"green"}`,
-            `tellraw @a {"text":"💡 播放速度: 每帧重复 ${frameRepeat} 次","color":"yellow"}`,
+            `tellraw @a {"text":"💡 使用原始 GIF 帧延迟，速度倍率: ${speedMultiplier}x","color":"yellow"}`,
             ver === 'bedrock' && !clearParticles ? `tellraw @a {"text":"💡 粒子过渡效果已启用","color":"yellow"}` : ''
         ].filter(Boolean);
         funcFolder.file("setup.mcfunction", setupCmds.join('\n'));
@@ -192,7 +306,7 @@ export class DatapackGenerator {
         ];
         funcFolder.file("tick.mcfunction", tickCmds.join('\n'));
         
-        // 生成播放逻辑（使用帧重复控制速度）
+        // 生成播放逻辑（使用每帧独立延迟）
         const tickPlayCmds = [];
         
         // 显示当前帧
@@ -200,15 +314,16 @@ export class DatapackGenerator {
             tickPlayCmds.push(`execute if score #frame ${ns}_anim matches ${i} run function ${ns}:frames/frame_${i}`);
         }
         
-        // 增加重复计数
-        tickPlayCmds.push(`scoreboard players add #repeat ${ns}_anim 1`);
+        // 增加计时器
+        tickPlayCmds.push(`scoreboard players add #timer ${ns}_anim 1`);
         
-        // 检查是否达到重复次数
-        tickPlayCmds.push(`execute if score #repeat ${ns}_anim matches ${frameRepeat}.. run scoreboard players add #frame ${ns}_anim 1`);
-        tickPlayCmds.push(`execute if score #repeat ${ns}_anim matches ${frameRepeat}.. run scoreboard players set #repeat ${ns}_anim 0`);
-        
-        // 循环到第一帧
-        tickPlayCmds.push(`execute if score #frame ${ns}_anim matches ${AppState.frames.length} run scoreboard players set #frame ${ns}_anim 0`);
+        // 检查每帧的延迟时间
+        for (let i = 0; i < AppState.frames.length; i++) {
+            const delay = frameDelays[i];
+            const nextFrame = (i + 1) % AppState.frames.length;
+            tickPlayCmds.push(`execute if score #frame ${ns}_anim matches ${i} if score #timer ${ns}_anim matches ${delay}.. run scoreboard players set #frame ${ns}_anim ${nextFrame}`);
+            tickPlayCmds.push(`execute if score #frame ${ns}_anim matches ${i} if score #timer ${ns}_anim matches ${delay}.. run scoreboard players set #timer ${ns}_anim 0`);
+        }
         
         funcFolder.file("tick_play.mcfunction", tickPlayCmds.join('\n'));
         
@@ -216,7 +331,7 @@ export class DatapackGenerator {
         const playCmds = [
             `scoreboard players set #playing ${ns}_anim 1`,
             `scoreboard players set #frame ${ns}_anim 0`,
-            `scoreboard players set #repeat ${ns}_anim 0`,
+            `scoreboard players set #timer ${ns}_anim 0`,
             `tellraw @a {"text":"▶️ 动画开始播放","color":"green"}`
         ];
         funcFolder.file("play.mcfunction", playCmds.join('\n'));
@@ -229,16 +344,19 @@ export class DatapackGenerator {
         
         const restartCmds = [
             `scoreboard players set #frame ${ns}_anim 0`,
-            `scoreboard players set #repeat ${ns}_anim 0`,
+            `scoreboard players set #timer ${ns}_anim 0`,
             `scoreboard players set #playing ${ns}_anim 1`,
             `tellraw @a {"text":"🔄 动画重新开始","color":"green"}`
         ];
         funcFolder.file("restart.mcfunction", restartCmds.join('\n'));
         
         // 生成命令方块设置说明
+        const avgDelay = frameDelays.reduce((sum, delay) => sum + delay, 0) / frameDelays.length;
+        const totalDuration = frameDelays.reduce((sum, delay) => sum + delay, 0);
+        
         const readmeCmds = [
             `# ==========================================`,
-            `# 命令方块链动画设置说明`,
+            `# 命令方块链动画设置说明（每帧独立延迟）`,
             `# ==========================================`,
             ``,
             `# 1. 初始化（只需执行一次）`,
@@ -255,12 +373,14 @@ export class DatapackGenerator {
             ``,
             `# 动画参数：`,
             `# - 总帧数: ${AppState.frames.length} 帧`,
-            `# - 播放速度: 每帧重复 ${frameRepeat} 次`,
-            `# - 实际播放速度: ${frameRepeat} tick/帧`,
+            `# - 速度倍率: ${speedMultiplier}x`,
+            `# - 平均帧延迟: ${avgDelay.toFixed(1)} ticks`,
+            `# - 总循环时长: ${totalDuration} ticks (${(totalDuration * 50 / 1000).toFixed(1)}秒)`,
+            `# - 每帧延迟: ${frameDelays.map((d, i) => `帧${i}=${d}t`).join(', ')}`,
             ``,
             `# 注意事项：`,
             `# - 命令方块必须保持激活状态`,
-            `# - 播放速度由"每帧重复次数"控制，数值越大越慢`,
+            `# - 使用原始 GIF 帧延迟，每帧可能有不同的显示时间`,
             `# - 建议在创造模式下设置`,
             ver === 'bedrock' && !clearParticles ? `# - 粒子过渡效果：不清除上一帧，自然消散` : '',
             ver === 'bedrock' && clearParticles ? `# - 清除模式：每帧清除上一帧的方块` : ''

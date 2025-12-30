@@ -36,8 +36,12 @@ export class Renderer3D {
             AppState.controls.update();
 
             if (AppState.isAnim && AppState.frames.length > 1) {
-                const frameRepeat = parseInt(document.getElementById('frame-repeat')?.value || 3);
-                const frameInterval = frameRepeat * 50; // 每帧重复次数 * 50ms (1 tick = 50ms)
+                // 获取当前帧的有效延迟
+                const currentFrame = AppState.frames[AppState.currentFrameIndex];
+                const originalDelay = currentFrame ? (currentFrame.delayTicks || 2) : 2;
+                const speedMultiplier = AppState.speedMultiplier || 1.0;
+                const effectiveDelay = Math.max(1, Math.round(originalDelay / speedMultiplier));
+                const frameInterval = effectiveDelay * 50; // 转换为毫秒
                 
                 if (time - AppState.lastTime > frameInterval) {
                     AppState.currentFrameIndex = (AppState.currentFrameIndex + 1) % AppState.frames.length;

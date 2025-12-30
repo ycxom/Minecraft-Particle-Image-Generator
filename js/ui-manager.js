@@ -13,6 +13,7 @@ export class UIManager {
         const guideAnim = document.getElementById('guide-anim');
         const btnCopy = document.getElementById('btn-copy');
         const btnOoc = document.getElementById('btn-ooc');
+        const frameInfo = document.getElementById('frame-info');
 
         if (isAnim) {
             animUI.style.display = 'block';
@@ -22,6 +23,12 @@ export class UIManager {
             btnCopy.title = "动画模式不支持复制";
             btnOoc.disabled = true;
             btnOoc.title = "动画模式不支持单指令";
+            
+            // 显示帧信息面板
+            if (frameInfo) {
+                frameInfo.style.display = 'block';
+                this.updateFrameInfo();
+            }
         } else {
             animUI.style.display = 'none';
             guideStatic.style.display = 'block';
@@ -30,7 +37,58 @@ export class UIManager {
             btnCopy.title = "复制指令内容";
             btnOoc.disabled = false;
             btnOoc.title = "生成单指令";
+            
+            // 隐藏帧信息面板
+            if (frameInfo) {
+                frameInfo.style.display = 'none';
+            }
         }
+    }
+
+    /**
+     * 更新帧信息显示
+     */
+    updateFrameInfo() {
+        if (!AppState.isAnim || !AppState.frames.length) return;
+        
+        const totalFramesEl = document.getElementById('total-frames');
+        const avgDelayEl = document.getElementById('avg-delay');
+        const totalDurationEl = document.getElementById('total-duration');
+        const variableNoticeEl = document.getElementById('variable-timing-notice');
+        
+        if (totalFramesEl) {
+            totalFramesEl.textContent = AppState.frames.length;
+        }
+        
+        if (avgDelayEl) {
+            avgDelayEl.textContent = `${AppState.avgDelayTicks.toFixed(1)} ticks (${(AppState.avgDelayTicks * 50).toFixed(0)}ms)`;
+        }
+        
+        if (totalDurationEl) {
+            const speedMultiplier = this.getSpeedMultiplier();
+            const effectiveDuration = AppState.totalDuration / speedMultiplier;
+            const durationMs = effectiveDuration * 50;
+            const durationSec = (durationMs / 1000).toFixed(1);
+            totalDurationEl.textContent = `${effectiveDuration.toFixed(0)} ticks (${durationSec}s)`;
+        }
+        
+        // 检查是否有可变延迟
+        if (variableNoticeEl && AppState.frames.length > 1) {
+            const delays = AppState.frames.map(f => f.delayTicks || 2);
+            const minDelay = Math.min(...delays);
+            const maxDelay = Math.max(...delays);
+            const hasVariableDelay = (maxDelay - minDelay) > 1; // 差异超过1 tick
+            
+            variableNoticeEl.style.display = hasVariableDelay ? 'block' : 'none';
+        }
+    }
+
+    /**
+     * 获取当前速度倍率
+     */
+    getSpeedMultiplier() {
+        const speedSelect = document.getElementById('speed-multiplier');
+        return speedSelect ? parseFloat(speedSelect.value) || 1.0 : 1.0;
     }
 
     updateStats(text) {
@@ -54,6 +112,10 @@ export class UIManager {
                 try {
                     await this.imageParser.parseFile(file);
                     this.updateMode(AppState.isAnim);
+                    
+                    // 初始化速度倍率
+                    AppState.speedMultiplier = this.getSpeedMultiplier();
+                    
                     const stats = this.particleGenerator.update();
                     this.updateStats(stats);
                 } catch (err) {
@@ -79,6 +141,22 @@ export class UIManager {
                 if (AppState.isAnim) AppState.currentFrameIndex = 0;
                 const stats = this.particleGenerator.update();
                 this.updateStats(stats);
+            });
+        }
+        
+        // 速度倍率变化监听
+        const speedMultiplierEl = document.getElementById('speed-multiplier');
+        if (speedMultiplierEl) {
+            speedMultiplierEl.addEventListener('change', () => {
+                // 更新 AppState 中的速度倍率
+                AppState.speedMultiplier = this.getSpeedMultiplier();
+                
+                // 更新帧信息显示
+                if (AppState.isAnim) {
+                    this.updateFrameInfo();
+                }
+                
+                console.log(`速度倍率已更改为: ${AppState.speedMultiplier}x`);
             });
         }
     }

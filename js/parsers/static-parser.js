@@ -2,6 +2,9 @@
 import { BaseImageParser } from './base-parser.js';
 
 export class StaticImageParser extends BaseImageParser {
+    // 静态图片使用默认延迟（虽然不会用到）
+    static DEFAULT_DELAY_TICKS = 2;
+    
     async parse(file) {
         const bmp = await createImageBitmap(file);
         const cvs = document.createElement('canvas');
@@ -11,6 +14,12 @@ export class StaticImageParser extends BaseImageParser {
         ctx.drawImage(bmp, 0, 0);
         
         const imageData = ctx.getImageData(0, 0, bmp.width, bmp.height);
-        return [imageData];
+        
+        // 返回包含延迟信息的帧对象，保持一致性
+        return [{
+            imageData: imageData,
+            delayMs: StaticImageParser.DEFAULT_DELAY_TICKS * 50,
+            delayTicks: StaticImageParser.DEFAULT_DELAY_TICKS
+        }];
     }
 }

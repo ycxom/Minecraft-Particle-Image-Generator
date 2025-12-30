@@ -2,6 +2,38 @@
 import { BaseImageParser } from './base-parser.js';
 
 export class GIFParser extends BaseImageParser {
+    // 默认延迟：2 ticks (100ms)
+    static DEFAULT_DELAY_TICKS = 2;
+    
+    // 最小延迟：1 tick (50ms)
+    static MIN_DELAY_TICKS = 1;
+    
+    /**
+     * 将 GIF 延迟单位（1/100秒）转换为毫秒和 Minecraft ticks
+     * @param {number} gifDelay - GIF 延迟值（1/100秒）
+     * @returns {Object} { delayMs, delayTicks }
+     */
+    convertGifDelay(gifDelay) {
+        // GIF 延迟单位是 1/100 秒，转换为毫秒
+        const delayMs = (gifDelay || 0) * 10;
+        
+        // 如果延迟为 0 或太小，使用默认值
+        if (delayMs === 0 || delayMs < 50) {
+            return {
+                delayMs: GIFParser.DEFAULT_DELAY_TICKS * 50,
+                delayTicks: GIFParser.DEFAULT_DELAY_TICKS
+            };
+        }
+        
+        // 转换为 Minecraft ticks (1 tick = 50ms)
+        const delayTicks = Math.max(
+            GIFParser.MIN_DELAY_TICKS,
+            Math.round(delayMs / 50)
+        );
+        
+        return { delayMs, delayTicks };
+    }
+
     async parse(buffer) {
         console.log('开始解析 GIF，大小:', buffer.byteLength, 'bytes');
         
@@ -58,6 +90,11 @@ export class GIFParser extends BaseImageParser {
         for (let i = 0; i < numFrames; i++) {
             const frameInfo = reader.frameInfo(i);
             
+            // 提取帧延迟信息
+            const { delayMs, delayTicks } = this.convertGifDelay(frameInfo.delay);
+            
+            console.log(`帧 ${i}: 延迟 ${frameInfo.delay}/100s = ${delayMs}ms = ${delayTicks} ticks`);
+            
             // 根据 disposal 方法处理
             if (i > 0 && previousImageData) {
                 const prevFrameInfo = reader.frameInfo(i - 1);
@@ -93,7 +130,13 @@ export class GIFParser extends BaseImageParser {
             
             // 获取完整帧
             const fullFrame = ctx.getImageData(0, 0, width, height);
-            imageDataFrames.push(fullFrame);
+            
+            // 返回包含延迟信息的帧对象
+            imageDataFrames.push({
+                imageData: fullFrame,
+                delayMs: delayMs,
+                delayTicks: delayTicks
+            });
         }
         
         return imageDataFrames;
@@ -107,7 +150,13 @@ export class GIFParser extends BaseImageParser {
             const imageData = await this.createCanvasFromBlob(blob);
             
             console.warn('⚠️ 降级方案只能获取 GIF 第一帧，动画效果将丢失');
-            return [imageData];
+            
+            // 返回包含默认延迟信息的帧对象
+            return [{
+                imageData: imageData,
+                delayMs: GIFParser.DEFAULT_DELAY_TICKS * 50,
+                delayTicks: GIFParser.DEFAULT_DELAY_TICKS
+            }];
         } catch (err) {
             console.error('❌ 降级方案也失败:', err);
             throw new Error(`GIF 解析完全失败: ${err.message}`);

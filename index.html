@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minecraft 3D 粒子工坊 (终极版)</title>
+    <title>Minecraft 3D 粒子工坊 @ycxom</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -44,9 +44,27 @@
         <div id="anim-controls">
             <h2 style="color:#22c55e; margin-top:0">🎞️ 动画设置</h2>
             <div class="control-group">
-                <label>播放速度 (每帧重复次数)</label>
-                <input type="number" id="frame-repeat" value="3" min="1" max="20">
-                <div style="font-size:0.75em; color:#888; margin-top:4px; text-align:center">数值越大播放越慢，建议 2-5</div>
+                <label>播放速度</label>
+                <select id="speed-multiplier">
+                    <option value="0.25">0.25x (慢速)</option>
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1x (原速)</option>
+                    <option value="2">2x</option>
+                    <option value="4">4x (快速)</option>
+                </select>
+                <div style="font-size:0.75em; color:#888; margin-top:4px; text-align:center">1x 为 GIF 原始播放速度</div>
+            </div>
+            
+            <div id="frame-info" class="control-group" style="display:none;">
+                <label>帧信息</label>
+                <div style="background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; font-size: 0.85em;">
+                    <div>总帧数: <span id="total-frames">-</span></div>
+                    <div>平均延迟: <span id="avg-delay">-</span></div>
+                    <div>预计时长: <span id="total-duration">-</span></div>
+                    <div id="variable-timing-notice" style="color: #ffa500; margin-top: 4px; display: none;">
+                        ⚠️ 此 GIF 各帧延迟差异较大
+                    </div>
+                </div>
             </div>
             <div class="control-group">
                 <label>动画播放模式</label>
@@ -62,6 +80,14 @@
                     清除上一帧粒子 (基岩版方块模式)
                 </label>
                 <div style="font-size:0.75em; color:#888; margin-top:4px;">不勾选时粒子自然消散，形成过渡效果</div>
+            </div>
+            
+            <div class="control-group">
+                <label>
+                    <input type="checkbox" id="enhance-particles" style="width:auto; margin-right:5px;" checked>
+                    粒子增强模式
+                </label>
+                <div style="font-size:0.75em; color:#888; margin-top:4px;">增加粒子数量和重复显示，提高可见性</div>
             </div>
         </div>
 
@@ -181,7 +207,8 @@
                 <h3 style="color:#22c55e">🎞️ 动画特别说明</h3>
                 <div class="tip">检测到 GIF/动画！已自动切换为动画模式。</div>
                 <ol class="step-list">
-                    <li><b>调整速度：</b> 左侧“动画设置”中的 Tick 间隔决定播放速度 (1秒=20Tick)。GIF通常建议设为 2 或 3。</li>
+                    <li><b>调整速度：</b> 左侧“动画设置”中的 播放速度决定播放快慢。1x 为 GIF 原始速度。</li>
+                    <li><b>粒子增强：</b> 勾选"粒子增强模式"可解决粒子一闪而过的问题，会增加粒子数量和重复显示。</li>
                     <li><b>必须使用数据包：</b> 动画包含数千条指令，无法直接复制。请点击 <b>📦 生成并下载数据包</b>。</li>
                     <li><b>工作原理：</b>
                         <ul>

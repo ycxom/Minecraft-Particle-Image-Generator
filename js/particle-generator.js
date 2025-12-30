@@ -5,7 +5,10 @@ export class ParticleGenerator {
     update() {
         if (!AppState.frames || AppState.frames.length === 0) return;
 
-        const frameData = AppState.frames[AppState.currentFrameIndex];
+        const frame = AppState.frames[AppState.currentFrameIndex];
+        // 兼容新的帧数据结构：如果是对象则取 imageData，否则直接使用
+        const frameData = frame.imageData || frame;
+        
         const params = this.getParameters(frameData);
         const scaledData = this.scaleImage(frameData, params.targetW, params.targetH);
         const particleData = this.generateParticleData(scaledData, params);
@@ -13,7 +16,7 @@ export class ParticleGenerator {
         AppState.currentFrameGen = particleData;
         this.renderParticles(particleData, params.spacing);
         
-        return this.getStatsText(params, particleData.count);
+        return this.getStatsText(params, particleData.count, frame);
     }
 
     getParameters(frameData) {
@@ -95,11 +98,18 @@ export class ParticleGenerator {
         AppState.scene.add(AppState.particleSystem);
     }
 
-    getStatsText(params, count) {
+    getStatsText(params, count, frame) {
         const typeStr = AppState.isAnim ? `动画 (${AppState.frames.length} 帧)` : "静态图";
         const frameInfo = AppState.isAnim ? `<br>当前帧: ${AppState.currentFrameIndex + 1}/${AppState.frames.length}` : '';
+        
+        // 显示帧延迟信息（如果有）
+        let delayInfo = '';
+        if (AppState.isAnim && frame && frame.delayTicks) {
+            delayInfo = `<br>帧延迟: ${frame.delayMs}ms (${frame.delayTicks} ticks)`;
+        }
+        
         const countColor = count > 5000 ? '#f55' : '#5f5';
-        return `${typeStr}${frameInfo}<br>尺寸: ${params.targetW}x${params.targetH}<br>粒子数: <span style="color:${countColor}">${count}</span>`;
+        return `${typeStr}${frameInfo}${delayInfo}<br>尺寸: ${params.targetW}x${params.targetH}<br>粒子数: <span style="color:${countColor}">${count}</span>`;
     }
 
     degToRad(deg) {
