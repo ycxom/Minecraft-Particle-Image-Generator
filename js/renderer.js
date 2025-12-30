@@ -36,8 +36,8 @@ export class Renderer3D {
             AppState.controls.update();
 
             if (AppState.isAnim && AppState.frames.length > 1) {
-                const tickDelay = parseInt(document.getElementById('tick-delay')?.value || 2);
-                const frameInterval = tickDelay * 50;
+                const frameRepeat = parseInt(document.getElementById('frame-repeat')?.value || 3);
+                const frameInterval = frameRepeat * 50; // 每帧重复次数 * 50ms (1 tick = 50ms)
                 
                 if (time - AppState.lastTime > frameInterval) {
                     AppState.currentFrameIndex = (AppState.currentFrameIndex + 1) % AppState.frames.length;
